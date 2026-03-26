@@ -32,9 +32,7 @@ jobs:
 
       - name: Fetch KSU-Next
         run: |
-          # Use the official KernelSU-Next setup script URL
           curl -LSs "https://raw.githubusercontent.com/KernelSU-Next/KernelSU-Next/next/kernel/setup.sh" | bash -s next
-          # Ensure KSU is included in the build
           if ! grep -q "kernelsu" drivers/Kconfig; then
             sed -i '$i source "drivers/kernelsu/Kconfig"' drivers/Kconfig
           fi
@@ -45,13 +43,21 @@ jobs:
       - name: Fetch SUSFS
         run: |
           git clone https://gitlab.com/simonpunk/susfs4ksu.git
-          # Applying SUSFS patches to the kernel source
-          cp -r susfs4ksu/kernel_patches/5.10/* . 
-          patch -p1 < fs/susfs.patch || true
-          patch -p1 < include/linux/susfs.patch || true
-          # Also need to copy the susfs source files
-          cp susfs4ksu/kernel_patches/fs/susfs.c fs/
-          cp susfs4ksu/kernel_patches/include/linux/susfs.h include/linux/
+          # Find SuSFS patches for 5.10
+          # We'll search for the directory '5.10' inside Kernel_Patches and copy its contents
+          # Note: Case sensitivity matters in GitLab URLs/repos
+          SUSFS_PATCH_DIR=$(find susfs4ksu/ -name "5.10" -type d | head -n 1)
+          if [ -d "$SUSFS_PATCH_DIR" ]; then
+            cp -r "$SUSFS_PATCH_DIR"/* .
+          fi
+          
+          # Try to apply the patches
+          [ -f fs/susfs.patch ] && patch -p1 < fs/susfs.patch || echo "fs/susfs.patch not found"
+          [ -f include/linux/susfs.patch ] && patch -p1 < include/linux/susfs.patch || echo "include/linux/susfs.patch not found"
+          
+          # Copy source files
+          find susfs4ksu/ -name "susfs.c" -exec cp {} fs/ \; || echo "susfs.c not found"
+          find susfs4ksu/ -name "susfs.h" -exec cp {} include/linux/ \; || echo "susfs.h not found"
 
       - name: Configure Kernel (Full LTO)
         run: |
