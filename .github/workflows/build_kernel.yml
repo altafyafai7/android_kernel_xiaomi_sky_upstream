@@ -24,29 +24,17 @@ jobs:
           
       - name: Fetch Toolchains
         run: |
-          mkdir -p toolchains/clang
-          mkdir -p toolchains/gcc64
-          mkdir -p toolchains/gcc32
+          mkdir -p toolchains
           
-          # Clang 12 from Android 12 release
+          # Use LineageOS mirrors for reliable GCC toolchains
+          git clone --depth=1 https://github.com/LineageOS/android_prebuilts_gcc_linux-x86_aarch64_aarch64-linux-android-4.9.git toolchains/gcc64
+          git clone --depth=1 https://github.com/LineageOS/android_prebuilts_gcc_linux-x86_arm_arm-linux-androideabi-4.9.git toolchains/gcc32
+          
+          # Fetch Clang 12 from Google (tarball is usually fine if we verify it)
+          mkdir -p toolchains/clang
           curl -LSs "https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86/+archive/refs/heads/android12-release/clang-r416183b1.tar.gz" -o clang.tar.gz
           tar -C toolchains/clang -xzf clang.tar.gz
-          
-          # GCC 64-bit (aarch64-linux-android-4.9) from master
-          curl -LSs "https://android.googlesource.com/platform/prebuilts/gcc/linux-x86/aarch64/aarch64-linux-android-4.9/+archive/refs/heads/master.tar.gz" -o gcc64.tar.gz
-          tar -C toolchains/gcc64 -xzf gcc64.tar.gz
-          
-          # GCC 32-bit (arm-linux-androideabi-4.9) from master
-          curl -LSs "https://android.googlesource.com/platform/prebuilts/gcc/linux-x86/arm/arm-linux-androideabi-4.9/+archive/refs/heads/master.tar.gz" -o gcc32.tar.gz
-          tar -C toolchains/gcc32 -xzf gcc32.tar.gz
-          
-          rm *.tar.gz
-          
-          # Debug: List binaries to ensure they exist
-          echo "Checking GCC64 bin directory:"
-          ls toolchains/gcc64/bin/ | grep gcc || echo "No gcc found in gcc64/bin"
-          echo "Checking GCC32 bin directory:"
-          ls toolchains/gcc32/bin/ | grep gcc || echo "No gcc found in gcc32/bin"
+          rm clang.tar.gz
 
       - name: Fetch KSU-Next
         run: |
@@ -77,13 +65,15 @@ jobs:
           export CROSS_COMPILE=aarch64-linux-android-
           export CROSS_COMPILE_ARM32=arm-linux-androideabi-
           
-          make O=out ARCH=arm64 vendor/sky_GKI.config
+          # Initialize with sky_GKI.config - Pass CC=clang to prevent searching for GCC
+          make O=out ARCH=arm64 CC=clang vendor/sky_GKI.config
           
           scripts/config --file out/.config --enable CONFIG_KSU
           scripts/config --file out/.config --enable CONFIG_KSU_NEXT
           scripts/config --file out/.config --enable CONFIG_SUSFS
           scripts/config --file out/.config --enable CONFIG_KSU_SUSFS
           
+          # Enable Full LTO
           scripts/config --file out/.config --disable CONFIG_LTO_NONE
           scripts/config --file out/.config --enable CONFIG_LTO_CLANG_FULL
           
