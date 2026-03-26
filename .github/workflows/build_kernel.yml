@@ -20,8 +20,9 @@ jobs:
       - name: Setup Build Environment
         run: |
           sudo apt-get update
-          sudo apt-get install -y bc bison build-essential ccache curl flex g++-multilib gcc-multilib git gnupg gperf lib32ncurses5-dev lib32readline-dev lib32z1-dev liblz4-tool libncurses5 libncurses5-dev libsdl1.2-dev libssl-dev libxml2 libxml2-utils lzop pngcrush rsync schedtool squashfs-tools xsltproc zip zlib1g-dev python3 python3-pip
-          pip3 install git-repo
+          sudo apt-get install -y bc bison build-essential ccache curl flex g++-multilib gcc-multilib git gnupg gperf libxml2 libxml2-utils lzop rsync schedtool squashfs-tools xsltproc zip zlib1g-dev python3 python3-pip libncurses-dev libssl-dev
+          # Some older toolchains need libncurses5, we can try to install it or symlink if needed
+          sudo apt-get install -y libncurses5 || echo "libncurses5 not found, skipping..."
 
       - name: Fetch Toolchain (Clang 12)
         run: |
@@ -46,8 +47,6 @@ jobs:
           git clone https://gitlab.com/simonpunk/susfs4ksu.git
           # Applying SUSFS patches to the kernel source
           cp -r susfs4ksu/kernel_patches/5.10/* . 
-          # Applying specific patches for 5.10 GKI if they exist
-          # Standard GKI 5.10 patches are usually what's needed
           patch -p1 < fs/susfs.patch || true
           patch -p1 < include/linux/susfs.patch || true
           # Also need to copy the susfs source files
