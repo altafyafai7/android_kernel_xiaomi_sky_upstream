@@ -4,7 +4,8 @@ on:
   workflow_dispatch:
   push:
     branches:
-      - oss-upstream
+      - main
+      - ksunext-susfs-lto
 
 jobs:
   build:
@@ -32,12 +33,26 @@ jobs:
       - name: Fetch KSU-Next
         run: |
           curl -LSs "https://raw.githubusercontent.com/tiann/KernelSU-Next/main/kernel/setup.sh" | bash -s main
+          # Ensure KSU is included in the build
+          if ! grep -q "kernelsu" drivers/Kconfig; then
+            sed -i '$i source "drivers/kernelsu/Kconfig"' drivers/Kconfig
+          fi
+          if ! grep -q "kernelsu" drivers/Makefile; then
+            echo 'obj-y += kernelsu/' >> drivers/Makefile
+          fi
 
       - name: Fetch SUSFS
         run: |
           git clone https://gitlab.com/simonpunk/susfs4ksu.git
+          # Applying SUSFS patches to the kernel source
           cp -r susfs4ksu/kernel_patches/5.10/* . 
-          find . -name "*.patch" -exec patch -p1 < {} \; || true
+          # Applying specific patches for 5.10 GKI if they exist
+          # Standard GKI 5.10 patches are usually what's needed
+          patch -p1 < fs/susfs.patch || true
+          patch -p1 < include/linux/susfs.patch || true
+          # Also need to copy the susfs source files
+          cp susfs4ksu/kernel_patches/fs/susfs.c fs/
+          cp susfs4ksu/kernel_patches/include/linux/susfs.h include/linux/
 
       - name: Configure Kernel (Full LTO)
         run: |
@@ -46,12 +61,13 @@ jobs:
           export CROSS_COMPILE=aarch64-linux-android-
           export CROSS_COMPILE_ARM32=arm-linux-androideabi-
           
-          # Initialize with your specific sky_GKI.config
+          # Initialize with sky_GKI.config
           make O=out ARCH=arm64 vendor/sky_GKI.config
           
-          # Enable KSU-Next and SUSFS
+          # Enable KSU-Next and SUSFS in the config
           scripts/config --file out/.config --enable CONFIG_KSU
           scripts/config --file out/.config --enable CONFIG_KSU_NEXT
+          scripts/config --file out/.config --enable CONFIG_SUSFS
           scripts/config --file out/.config --enable CONFIG_KSU_SUSFS
           
           # Enable Full LTO
