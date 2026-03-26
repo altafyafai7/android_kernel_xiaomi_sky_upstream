@@ -4,7 +4,6 @@ on:
   workflow_dispatch:
   push:
     branches:
-      - main
       - ksunext-susfs-lto
 
 jobs:
@@ -25,16 +24,15 @@ jobs:
       - name: Fetch Toolchains
         run: |
           mkdir -p toolchains
-          
-          # Use LineageOS mirrors for reliable GCC toolchains
-          git clone --depth=1 https://github.com/LineageOS/android_prebuilts_gcc_linux-x86_aarch64_aarch64-linux-android-4.9.git toolchains/gcc64
-          git clone --depth=1 https://github.com/LineageOS/android_prebuilts_gcc_linux-x86_arm_arm-linux-androideabi-4.9.git toolchains/gcc32
-          
-          # Fetch Clang 12 from Google (tarball is usually fine if we verify it)
+          # Fetch Clang 12 from Google
           mkdir -p toolchains/clang
           curl -LSs "https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86/+archive/refs/heads/android12-release/clang-r416183b1.tar.gz" -o clang.tar.gz
           tar -C toolchains/clang -xzf clang.tar.gz
           rm clang.tar.gz
+          
+          # We'll still fetch GCC for fallback/compatibility but prioritize LLVM=1
+          git clone --depth=1 https://github.com/LineageOS/android_prebuilts_gcc_linux-x86_aarch64_aarch64-linux-android-4.9.git toolchains/gcc64
+          git clone --depth=1 https://github.com/LineageOS/android_prebuilts_gcc_linux-x86_arm_arm-linux-androideabi-4.9.git toolchains/gcc32
 
       - name: Fetch KSU-Next
         run: |
@@ -61,12 +59,9 @@ jobs:
       - name: Configure Kernel (Full LTO)
         run: |
           export PATH=$(pwd)/toolchains/clang/bin:$(pwd)/toolchains/gcc64/bin:$(pwd)/toolchains/gcc32/bin:$PATH
-          export CLANG_TRIPLE=aarch64-linux-gnu-
-          export CROSS_COMPILE=aarch64-linux-android-
-          export CROSS_COMPILE_ARM32=arm-linux-androideabi-
           
-          # Initialize with sky_GKI.config - Pass CC=clang to prevent searching for GCC
-          make O=out ARCH=arm64 CC=clang vendor/sky_GKI.config
+          # Use LLVM=1 and LLVM_IAS=1 for modern GKI builds
+          make O=out ARCH=arm64 LLVM=1 LLVM_IAS=1 vendor/sky_GKI.config
           
           scripts/config --file out/.config --enable CONFIG_KSU
           scripts/config --file out/.config --enable CONFIG_KSU_NEXT
@@ -77,27 +72,12 @@ jobs:
           scripts/config --file out/.config --disable CONFIG_LTO_NONE
           scripts/config --file out/.config --enable CONFIG_LTO_CLANG_FULL
           
-          make O=out ARCH=arm64 CC=clang \
-            CLANG_TRIPLE=aarch64-linux-gnu- \
-            CROSS_COMPILE=aarch64-linux-android- \
-            CROSS_COMPILE_ARM32=arm-linux-androideabi- \
-            olddefconfig
+          make O=out ARCH=arm64 LLVM=1 LLVM_IAS=1 olddefconfig
 
       - name: Build Kernel
         run: |
           export PATH=$(pwd)/toolchains/clang/bin:$(pwd)/toolchains/gcc64/bin:$(pwd)/toolchains/gcc32/bin:$PATH
-          make -j$(nproc --all) O=out ARCH=arm64 \
-            CC=clang \
-            CLANG_TRIPLE=aarch64-linux-gnu- \
-            CROSS_COMPILE=aarch64-linux-android- \
-            CROSS_COMPILE_ARM32=arm-linux-androideabi- \
-            LD=ld.lld \
-            AR=llvm-ar \
-            NM=llvm-nm \
-            OBJCOPY=llvm-objcopy \
-            OBJDUMP=llvm-objdump \
-            STRIP=llvm-strip \
-            Image.gz dtbo.img
+          make -j$(nproc --all) O=out ARCH=arm64 LLVM=1 LLVM_IAS=1 Image.gz dtbo.img
 
       - name: Upload Artifacts
         uses: actions/upload-artifact@v4
