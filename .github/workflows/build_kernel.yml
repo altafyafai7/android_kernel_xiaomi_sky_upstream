@@ -21,7 +21,6 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y bc bison build-essential ccache curl flex g++-multilib gcc-multilib git gnupg gperf libxml2 libxml2-utils lzop rsync schedtool squashfs-tools xsltproc zip zlib1g-dev python3 python3-pip libncurses-dev libssl-dev
-          # Some older toolchains need libncurses5, we can try to install it or symlink if needed
           sudo apt-get install -y libncurses5 || echo "libncurses5 not found, skipping..."
 
       - name: Fetch Toolchain (Clang 12)
@@ -33,7 +32,8 @@ jobs:
 
       - name: Fetch KSU-Next
         run: |
-          curl -LSs "https://raw.githubusercontent.com/tiann/KernelSU-Next/main/kernel/setup.sh" | bash -s main
+          # Use the official KSU-Next setup script URL
+          curl -LSs "https://raw.githubusercontent.com/rifsxd/KernelSU-Next/main/kernel/setup.sh" | bash -s main
           # Ensure KSU is included in the build
           if ! grep -q "kernelsu" drivers/Kconfig; then
             sed -i '$i source "drivers/kernelsu/Kconfig"' drivers/Kconfig
