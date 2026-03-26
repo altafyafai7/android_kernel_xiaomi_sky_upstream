@@ -23,12 +23,25 @@ jobs:
           sudo apt-get install -y bc bison build-essential ccache curl flex g++-multilib gcc-multilib git gnupg gperf libxml2 libxml2-utils lzop rsync schedtool squashfs-tools xsltproc zip zlib1g-dev python3 python3-pip libncurses-dev libssl-dev
           sudo apt-get install -y libncurses5 || echo "libncurses5 not found, skipping..."
 
-      - name: Fetch Toolchain (Clang 12)
+      - name: Fetch Toolchains
         run: |
           mkdir -p toolchains/clang
+          mkdir -p toolchains/gcc64
+          mkdir -p toolchains/gcc32
+          
+          # Clang 12
           curl -LO https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86/+archive/refs/heads/android12-release/clang-r416183b1.tar.gz
           tar -C toolchains/clang -xzf clang-r416183b1.tar.gz
-          rm clang-r416183b1.tar.gz
+          
+          # GCC 64-bit
+          curl -LO https://android.googlesource.com/platform/prebuilts/gcc/linux-x86/aarch64/aarch64-linux-android-4.9/+archive/refs/heads/android12-release.tar.gz
+          tar -C toolchains/gcc64 -xzf aarch64-linux-android-4.9.tar.gz || curl -LO https://android.googlesource.com/platform/prebuilts/gcc/linux-x86/aarch64/aarch64-linux-android-4.9/+archive/refs/heads/master.tar.gz && tar -C toolchains/gcc64 -xzf master.tar.gz
+          
+          # GCC 32-bit
+          curl -LO https://android.googlesource.com/platform/prebuilts/gcc/linux-x86/arm/arm-linux-androideabi-4.9/+archive/refs/heads/android12-release.tar.gz
+          tar -C toolchains/gcc32 -xzf arm-linux-androideabi-4.9.tar.gz || curl -LO https://android.googlesource.com/platform/prebuilts/gcc/linux-x86/arm/arm-linux-androideabi-4.9/+archive/refs/heads/master.tar.gz && tar -C toolchains/gcc32 -xzf master.tar.gz
+          
+          rm *.tar.gz
 
       - name: Fetch KSU-Next
         run: |
@@ -43,47 +56,37 @@ jobs:
       - name: Fetch SUSFS
         run: |
           git clone https://gitlab.com/simonpunk/susfs4ksu.git
-          # Find SuSFS patches for 5.10
-          # We'll search for the directory '5.10' inside Kernel_Patches and copy its contents
-          # Note: Case sensitivity matters in GitLab URLs/repos
           SUSFS_PATCH_DIR=$(find susfs4ksu/ -name "5.10" -type d | head -n 1)
           if [ -d "$SUSFS_PATCH_DIR" ]; then
             cp -r "$SUSFS_PATCH_DIR"/* .
           fi
-          
-          # Try to apply the patches
           [ -f fs/susfs.patch ] && patch -p1 < fs/susfs.patch || echo "fs/susfs.patch not found"
           [ -f include/linux/susfs.patch ] && patch -p1 < include/linux/susfs.patch || echo "include/linux/susfs.patch not found"
-          
-          # Copy source files
           find susfs4ksu/ -name "susfs.c" -exec cp {} fs/ \; || echo "susfs.c not found"
           find susfs4ksu/ -name "susfs.h" -exec cp {} include/linux/ \; || echo "susfs.h not found"
 
       - name: Configure Kernel (Full LTO)
         run: |
-          export PATH=$(pwd)/toolchains/clang/bin:$PATH
+          export PATH=$(pwd)/toolchains/clang/bin:$(pwd)/toolchains/gcc64/bin:$(pwd)/toolchains/gcc32/bin:$PATH
           export CLANG_TRIPLE=aarch64-linux-gnu-
           export CROSS_COMPILE=aarch64-linux-android-
           export CROSS_COMPILE_ARM32=arm-linux-androideabi-
           
-          # Initialize with sky_GKI.config
           make O=out ARCH=arm64 vendor/sky_GKI.config
           
-          # Enable KSU-Next and SUSFS in the config
           scripts/config --file out/.config --enable CONFIG_KSU
           scripts/config --file out/.config --enable CONFIG_KSU_NEXT
           scripts/config --file out/.config --enable CONFIG_SUSFS
           scripts/config --file out/.config --enable CONFIG_KSU_SUSFS
           
-          # Enable Full LTO
           scripts/config --file out/.config --disable CONFIG_LTO_NONE
           scripts/config --file out/.config --enable CONFIG_LTO_CLANG_FULL
           
-          make O=out ARCH=arm64 olddefconfig
+          make O=out ARCH=arm64 CC=clang olddefconfig
 
       - name: Build Kernel
         run: |
-          export PATH=$(pwd)/toolchains/clang/bin:$PATH
+          export PATH=$(pwd)/toolchains/clang/bin:$(pwd)/toolchains/gcc64/bin:$(pwd)/toolchains/gcc32/bin:$PATH
           make -j$(nproc --all) O=out ARCH=arm64 \
             CC=clang \
             CLANG_TRIPLE=aarch64-linux-gnu- \
