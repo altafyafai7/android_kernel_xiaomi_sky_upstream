@@ -32,8 +32,8 @@ jobs:
 
       - name: Fetch KSU-Next
         run: |
-          # Use the official KSU-Next setup script URL
-          curl -LSs "https://raw.githubusercontent.com/rifsxd/KernelSU-Next/main/kernel/setup.sh" | bash -s main
+          # Use the official KernelSU-Next setup script URL
+          curl -LSs "https://raw.githubusercontent.com/KernelSU-Next/KernelSU-Next/next/kernel/setup.sh" | bash -s next
           # Ensure KSU is included in the build
           if ! grep -q "kernelsu" drivers/Kconfig; then
             sed -i '$i source "drivers/kernelsu/Kconfig"' drivers/Kconfig
